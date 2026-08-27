@@ -1,0 +1,27 @@
+{
+  "manifestVersion": 1,
+  "sourceOrder": [
+    {
+      "sourceKey": "live-2025-complete",
+      "displayName": "16.2025年直播【完整版】.txt",
+      "originalPath": "/home/ubuntu/upload/16.2025年直播【完整版】.txt",
+      "byteCount": 576734,
+      "newlineTerminatedLineCount": 20693,
+      "logicalLineCount": 20693,
+      "sha256": "4abce1ab938d5d442fb12f82681b5449a3bf5649bace88c7364508f36b4c8aad",
+      "processingMode": "strict-sequential-line-read"
+    },
+    {
+      "sourceKey": "course-1-23",
+      "displayName": "曲曲课程1-23.txt",
+      "originalPath": "/home/ubuntu/upload/曲曲课程1-23.txt",
+      "byteCount": 4943952,
+      "newlineTerminatedLineCount": 179083,
+      "logicalLineCount": 179083,
+      "sha256": "792624f9eda9feae5aa1cb48a657cc283332238cc3afa5483f95604d11d18e97",
+      "processingMode": "strict-sequential-line-read"
+    }
+  ],
+  "totalLogicalLines": 199776,
+  "integrityRule": "每行以源文件顺序存储，保留sourceKey、lineNumber、lineText、lineHash；段落和章节仅引用连续行号范围，绝不覆盖原文。"
+}
