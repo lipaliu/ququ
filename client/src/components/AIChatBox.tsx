@@ -114,10 +114,10 @@ export function AIChatBox({
   messages,
   onSendMessage,
   isLoading = false,
-  placeholder = "Type your message...",
+  placeholder = "把最卡你的那件事直接说出来…",
   className,
   height = "600px",
-  emptyStateMessage = "Start a conversation with AI",
+  emptyStateMessage = "你直接说，别绕。",
   suggestedPrompts,
 }: AIChatBoxProps) {
   const [input, setInput] = useState("");
@@ -292,8 +292,8 @@ export function AIChatBox({
                   <div className="size-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center">
                     <Sparkles className="size-4 text-primary" />
                   </div>
-                  <div className="rounded-lg bg-muted px-4 py-2.5">
-                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                    <div className="rounded-lg bg-muted px-4 py-2.5 text-sm text-muted-foreground">
+                      我在看，马上说重点。
                   </div>
                 </div>
               )}

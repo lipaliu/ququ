@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { startLogin } from "@/const";
+import { appendDirectMessage, resetDirectMessages, rollbackDirectUserMessage } from "@/lib/directMessages";
 import { trpc } from "@/lib/trpc";
 import {
   BookOpenText,
@@ -122,6 +123,7 @@ export default function Home() {
   const [tab, setTab] = useState<WorkspaceTab>("chat");
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<{ sourceId: number; startLine: number; endLine: number } | null>(null);
+  const [directMessages, setDirectMessages] = useState<Message[]>([]);
   const isReviewer = user?.role === "admin";
   const utils = trpc.useUtils();
   const overview = trpc.corpus.overview.useQuery(undefined, { enabled: isAuthenticated && isReviewer });
@@ -137,19 +139,17 @@ export default function Home() {
   });
 
   const createConversation = trpc.chat.createConversation.useMutation({
-    onSuccess: async (conversation) => {
-      await utils.chat.listConversations.invalidate();
-      setSelectedConversationId(conversation.id);
-      setTab("chat");
-    },
     onError: (error) => toast.error(error.message),
   });
   const sendMessage = trpc.chat.send.useMutation({
-    onSuccess: async () => {
-      await utils.chat.messages.invalidate(messageInput);
-      await utils.chat.listConversations.invalidate();
+    onSuccess: (result) => {
+      setDirectMessages((previous) => appendDirectMessage(previous, { role: "assistant", content: result.message.content }));
+      void utils.chat.listConversations.invalidate();
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error, variables) => {
+      setDirectMessages((previous) => rollbackDirectUserMessage(previous, variables.content));
+      toast.error(error.message);
+    },
   });
   const updateReview = trpc.corpus.updateReview.useMutation({
     onSuccess: () => utils.corpus.overview.invalidate(),
@@ -167,25 +167,32 @@ export default function Home() {
     }
     createConversation.mutate(
       { title, scenario },
-      {
+      { 
         onSuccess: (conversation) => {
-          if (firstMessage) sendMessage.mutate({ conversationId: conversation.id, content: firstMessage });
+          utils.chat.listConversations.setData(undefined, (previous) => [conversation, ...(previous ?? [])]);
+          setDirectMessages(resetDirectMessages());
+          setSelectedConversationId(conversation.id);
+          setTab("chat");
+          if (firstMessage) handleSend(firstMessage, conversation.id);
         },
       },
     );
+  };
+
+  const handleSend = (content: string, conversationId = selectedConversationId) => {
+    if (!conversationId) return;
+    setDirectMessages((previous) => appendDirectMessage(previous, { role: "user", content }));
+    sendMessage.mutate({ conversationId, content });
   };
 
   if (loading) {
     return <div className="min-h-screen p-6"><Skeleton className="mx-auto h-160 max-w-7xl rounded-[2rem]" /></div>;
   }
 
-  const chatMessages: Message[] = (messagesQuery.data ?? []).map((message) => {
-    const citations = parseEvidence(message.citationsJson).filter((item) => typeof item.sourceId === "number" && typeof item.startLine === "number" && typeof item.endLine === "number");
-    const citationText = message.role === "assistant" && citations.length
-      ? `\n\n---\n*参考原文定位：${citations.map((item) => `来源 ${item.sourceId} · 第 ${item.startLine}–${item.endLine} 行`).join("；")}*`
-      : "";
-    return { role: message.role, content: `${message.content}${citationText}` };
-  });
+  const chatMessages: Message[] = [
+    ...(messagesQuery.data ?? []).map((message) => ({ role: message.role, content: message.content })),
+    ...directMessages,
+  ];
   const selectedConversation = (conversationList.data ?? []).find((item) => item.id === selectedConversationId);
 
   return (
@@ -195,7 +202,7 @@ export default function Home() {
           <span className="flex size-10 items-center justify-center rounded-full border border-primary/20 bg-primary text-lg text-primary-foreground font-display">Q</span>
           <span>
             <span className="block text-lg font-semibold tracking-[0.16em]">曲曲分身</span>
-            <span className="block text-[10px] tracking-[0.22em] text-muted-foreground">EMOTIONAL COMPANION</span>
+            <span className="block text-[10px] tracking-[0.22em] text-muted-foreground">RELATIONSHIP JUDGMENT</span>
           </span>
         </button>
         {isAuthenticated ? (
@@ -226,8 +233,11 @@ export default function Home() {
             creating={createConversation.isPending}
             sending={sendMessage.isPending}
             onCreate={openConversation}
-            onSelect={setSelectedConversationId}
-            onSend={(content) => selectedConversationId && sendMessage.mutate({ conversationId: selectedConversationId, content })}
+            onSelect={(conversationId) => {
+              setDirectMessages(resetDirectMessages());
+              setSelectedConversationId(conversationId);
+            }}
+            onSend={(content) => handleSend(content)}
           />
         )}
 
@@ -274,18 +284,18 @@ function Hero() {
       <div className="relative grid gap-8 lg:grid-cols-[1.25fr_0.75fr] lg:items-end">
         <div>
           <Badge variant="outline" className="mb-5 rounded-full border-primary/25 bg-background/60 px-3 py-1 text-primary">
-            <Sparkles className="mr-1.5 size-3.5" />基于授权语料的参考对话
+            <Sparkles className="mr-1.5 size-3.5" />曲曲分身 · 关系判断与行动建议
           </Badge>
           <h1 className="font-display max-w-3xl text-4xl leading-[1.14] tracking-tight sm:text-5xl">
             把情绪放下来，<br /><i className="font-normal text-primary">把关系看清楚。</i>
           </h1>
           <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-            这是一个以你提供的直播和课程原文为依据的 AI 分身工作台。它提供亲密关系、沟通困惑和情感决策的多轮参考对话；每一项可采用原则均可回溯至对应原文行号。
+            不在情绪里绕圈，也不拿空话安慰你。这里专门聊亲密关系、沟通困惑和情感决策：先看清问题，再把下一步怎么做说具体。
           </p>
         </div>
         <div className="rounded-2xl border border-primary/15 bg-background/65 p-5 text-sm leading-6 text-muted-foreground backdrop-blur-sm">
           <div className="mb-3 flex items-center gap-2 font-medium text-foreground"><ShieldCheck className="size-4 text-primary" />使用边界</div>
-          <p>AI 分身不是现实中的“曲曲”，也不替代心理、医疗或法律专业意见。遇到自伤、他伤、暴力控制或即时危险时，系统会优先提供安全求助指引。</p>
+          <p>这里给的是关系判断与行动建议。遇到自伤、他伤、暴力控制或即时危险时，系统会先切换到安全求助指引；医疗和法律问题也会提醒你咨询相应专业人士。</p>
         </div>
       </div>
     </section>
@@ -336,7 +346,7 @@ function ChatWorkspace({ isAuthenticated, conversations, conversationsLoading, s
         {isAuthenticated && <div className="rounded-2xl border border-border/70 bg-card/75 p-4 shadow-sm"><div className="mb-3 text-sm font-semibold">我的对话</div><div className="space-y-1">{conversationsLoading ? <Skeleton className="h-12 w-full" /> : conversations.length === 0 ? <p className="py-2 text-xs leading-5 text-muted-foreground">从一个具体场景开始。你的对话仅保存在当前账户下。</p> : conversations.map((item) => <button key={item.id} onClick={() => onSelect(item.id)} className={`w-full rounded-lg px-3 py-2 text-left text-xs transition-colors ${item.id === selectedConversationId ? "bg-accent text-accent-foreground" : "hover:bg-muted"}`}><span className="block truncate">{item.title}</span><span className="mt-1 block text-[10px] text-muted-foreground">{item.scenario === "relationship" ? "亲密关系" : item.scenario === "communication" ? "沟通困惑" : item.scenario === "decision" ? "情感决策" : "自由对话"}</span></button>)}</div></div>}
       </aside>
       <div className="order-1 min-w-0 rounded-[1.5rem] border border-border/80 bg-card/80 p-2 shadow-[0_20px_50px_-36px_rgba(61,33,23,0.55)] lg:order-2">
-        {selectedConversationId ? <><div className="flex items-center justify-between border-b border-border/70 px-4 py-3"><div><p className="text-sm font-semibold">{selectedTitle ?? "对话中"}</p><p className="mt-0.5 text-[10px] text-muted-foreground">AI 分身参考对话 · 不替代专业意见</p></div><Leaf className="size-5 text-primary/70" /></div><AIChatBox messages={messages} onSendMessage={onSend} isLoading={sending || messagesLoading} height="620px" placeholder="说说此刻最想厘清的一件事…" suggestedPrompts={SCENARIOS.map((item) => item.prompt)} /></> : <EmptyChat onCreate={onCreate} />}
+        {selectedConversationId ? <><div className="flex items-center justify-between border-b border-border/70 px-4 py-3"><div><p className="text-sm font-semibold">{selectedTitle ?? "对话中"}</p><p className="mt-0.5 text-[10px] text-muted-foreground">曲曲分身 · 先判断，再行动</p></div><Leaf className="size-5 text-primary/70" /></div><AIChatBox messages={messages} onSendMessage={onSend} isLoading={sending || messagesLoading} height="620px" placeholder="把最卡你的那件事直接说出来…" emptyStateMessage="你直接说，别绕。" suggestedPrompts={SCENARIOS.map((item) => item.prompt)} /></> : <EmptyChat onCreate={onCreate} />}
       </div>
     </section>
   );

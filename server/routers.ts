@@ -3,7 +3,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { invokeLLM, listLLMModels } from "./_core/llm";
+import { invokeLLM } from "./_core/llm";
 import { assessRisk, buildAgentSystemPrompt } from "./agentPolicy";
 import * as db from "./db";
 
@@ -92,7 +92,8 @@ export const appRouter = router({
       const conversation = await db.getConversation(input.conversationId, ctx.user.id);
       if (!conversation) throw new Error("未找到该对话。");
       const risk = assessRisk(input.content);
-      await db.appendChatMessage({
+      const historyPromise = db.listChatMessages(input.conversationId);
+      const saveUserMessage = db.appendChatMessage({
         conversationId: input.conversationId,
         role: "user",
         content: input.content,
@@ -110,38 +111,24 @@ export const appRouter = router({
         return { message: assistant, riskCategory: risk.category };
       }
 
-      const [history, approvedPrinciples, passages, modelCatalog] = await Promise.all([
-        db.listChatMessages(input.conversationId),
-        db.getApprovedReviewItems(),
-        db.findRelevantPassages(input.content),
-        listLLMModels(),
-      ]);
-      const model = modelCatalog.data.find((candidate) => candidate.id === "gpt-5-mini")?.id ?? modelCatalog.data[0]?.id;
-      const evidence = passages.map((passage) => `来源 ${passage.sourceId}｜第 ${passage.startLine}-${passage.endLine} 行：\n${passage.passageText}`).join("\n\n---\n\n");
-      const approved = approvedPrinciples.map((item) => `- ${item.title}：${item.content}`).join("\n");
+      const [history] = await Promise.all([historyPromise, saveUserMessage]);
       const response = await invokeLLM({
-        model,
-        maxTokens: 900,
+        model: "gpt-5-mini",
+        maxTokens: 720,
         messages: [
-          { role: "system", content: buildAgentSystemPrompt(approved, evidence) },
-          ...history.slice(-12).map((message) => ({ role: message.role, content: message.content })),
+          { role: "system", content: buildAgentSystemPrompt() },
+          ...history.slice(-10).map((message) => ({ role: message.role, content: message.content })),
+          { role: "user", content: input.content },
         ],
       });
       const rawContent = response.choices[0]?.message?.content;
       const content = (typeof rawContent === "string" ? rawContent.trim() : "")
         || "我现在没有生成出合适的回复。你愿意换一种方式，把最让你卡住的具体场景说给我听吗？";
-      const citations = passages.map((passage) => ({
-        sourceId: passage.sourceId,
-        passageId: passage.id,
-        startLine: passage.startLine,
-        endLine: passage.endLine,
-      }));
       const assistant = await db.appendChatMessage({
         conversationId: input.conversationId,
         role: "assistant",
         content,
         riskLevel: "normal",
-        citationsJson: citations,
       });
       return { message: assistant, riskCategory: "none" as const };
     }),

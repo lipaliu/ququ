@@ -1,0 +1,32 @@
+{
+  "corpusVersion": "2026-08-28-v2",
+  "activeLearningSources": [
+    "live-2022-2026-complete",
+    "course-1-23"
+  ],
+  "sourceOrder": [
+    {
+      "sourceKey": "live-2022-2026-complete",
+      "displayName": "2022-2026年直播【完整版】(2).txt",
+      "originalPath": "/home/ubuntu/upload/2022-2026年直播【完整版】(2).txt",
+      "byteCount": 10872508,
+      "newlineDelimitedLineCount": 403052,
+      "terminalRecordCount": 403053,
+      "blankLineCount": 0,
+      "sha256": "7d051d3434ba68825e293e4feae6374dba502e1198d4fc283cfe4107a6eb01e1",
+      "ingestionAction": "ingest_as_new_source"
+    },
+    {
+      "sourceKey": "course-1-23",
+      "displayName": "曲曲课程1-23(1).txt",
+      "originalPath": "/home/ubuntu/upload/曲曲课程1-23(1).txt",
+      "byteCount": 4943952,
+      "newlineDelimitedLineCount": 179083,
+      "terminalRecordCount": 179084,
+      "blankLineCount": 0,
+      "sha256": "792624f9eda9feae5aa1cb48a657cc283332238cc3afa5483f95604d11d18e97",
+      "matchesExistingSourceKey": "course-1-23",
+      "ingestionAction": "reuse_existing_verified_source"
+    }
+  ]
+}

@@ -20,6 +20,14 @@ const SOURCE_SPECS = [
     originalByteCount: 4943952,
     expectedLogicalLineCount: 179083,
   },
+  {
+    sourceKey: "live-2022-2026-complete",
+    displayName: "2022-2026年直播【完整版】(2).txt",
+    path: "/home/ubuntu/upload/2022-2026年直播【完整版】(2).txt",
+    originalSha256: "7d051d3434ba68825e293e4feae6374dba502e1198d4fc283cfe4107a6eb01e1",
+    originalByteCount: 10872508,
+    expectedLogicalLineCount: 403052,
+  },
 ];
 
 const EXPRESSIONS = ["我跟你讲", "你知道吗", "对吧", "姐妹们", "就是说", "首先", "那么", "其实", "我认为", "我觉得"];
@@ -110,12 +118,15 @@ async function createSemanticUnits(connection, sourceId) {
         unit.map((entry) => entry.text).join("\n"),
         inferUnitKind(unit),
         JSON.stringify(annotations),
+        JSON.stringify([]),
+        "none",
+        JSON.stringify([]),
         "generated",
       ]);
       if (rows.length >= 500) {
         await connection.query(
           `INSERT INTO corpus_units
-            (source_id, section_id, passage_id, unit_number, start_line, end_line, unit_text, unit_kind, topic_json, annotation_status)
+            (source_id, section_id, passage_id, unit_number, start_line, end_line, unit_text, unit_kind, topic_json, expression_hits_json, case_type, boundary_tags_json, annotation_status)
            VALUES ?`,
           [rows.splice(0, rows.length)],
         );
@@ -125,7 +136,7 @@ async function createSemanticUnits(connection, sourceId) {
   if (rows.length) {
     await connection.query(
       `INSERT INTO corpus_units
-        (source_id, section_id, passage_id, unit_number, start_line, end_line, unit_text, unit_kind, topic_json, annotation_status)
+        (source_id, section_id, passage_id, unit_number, start_line, end_line, unit_text, unit_kind, topic_json, expression_hits_json, case_type, boundary_tags_json, annotation_status)
        VALUES ?`,
       [rows],
     );
@@ -322,13 +333,19 @@ async function refreshExpressionKnowledge(connection, results) {
 
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for corpus ingestion.");
+  const onlyIndex = process.argv.indexOf("--only");
+  const onlySourceKey = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : undefined;
+  const sourcesToIngest = onlySourceKey
+    ? SOURCE_SPECS.filter((source) => source.sourceKey === onlySourceKey)
+    : SOURCE_SPECS;
+  if (!sourcesToIngest.length) throw new Error(`未找到待导入来源：${onlySourceKey ?? ""}`);
   const connection = await mysql.createConnection(process.env.DATABASE_URL);
   try {
     const results = [];
-    for (const source of SOURCE_SPECS) {
+    for (const source of sourcesToIngest) {
       results.push(await ingestSource(connection, source));
     }
-    await refreshExpressionKnowledge(connection, results);
+    if (!onlySourceKey) await refreshExpressionKnowledge(connection, results);
     console.log(JSON.stringify({
       completed: true,
       sources: results.map(({ sourceId, totalLines, blankLines, passageNumber, unitNumber }) => ({ sourceId, totalLines, blankLines, passageNumber, unitNumber })),

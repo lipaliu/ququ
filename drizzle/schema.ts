@@ -52,6 +52,31 @@ export const corpusSources = mysqlTable("corpus_sources", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+export const corpusVersions = mysqlTable("corpus_versions", {
+  id: int("id").autoincrement().primaryKey(),
+  versionKey: varchar("version_key", { length: 80 }).notNull().unique(),
+  displayName: varchar("display_name", { length: 255 }).notNull(),
+  isDefaultLearningVersion: boolean("is_default_learning_version").notNull().default(false),
+  processingStatus: mysqlEnum("processing_status", ["draft", "ready", "active", "archived"]).notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const corpusVersionSources = mysqlTable("corpus_version_sources", {
+  id: int("id").autoincrement().primaryKey(),
+  versionId: int("version_id").notNull(),
+  sourceId: int("source_id").notNull(),
+  sourceAlias: varchar("source_alias", { length: 120 }).notNull(),
+  sourceFileName: varchar("source_file_name", { length: 255 }).notNull(),
+  sourceSha256: varchar("source_sha256", { length: 64 }).notNull(),
+  sourceOrder: int("source_order").notNull(),
+  mappingMethod: mysqlEnum("mapping_method", ["ingested", "verified_reuse"]).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("corpus_version_source_alias_unique").on(table.versionId, table.sourceAlias),
+  index("corpus_version_sources_order_idx").on(table.versionId, table.sourceOrder),
+]);
+
 export const corpusLines = mysqlTable("corpus_lines", {
   id: int("id").autoincrement().primaryKey(),
   sourceId: int("source_id").notNull(),

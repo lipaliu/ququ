@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assessRisk, buildAgentSystemPrompt } from "./agentPolicy";
+import { PERSONA_METHOD_LIBRARY } from "./personaBlueprint";
 
 describe("assessRisk", () => {
   it("将自伤语言分流为高风险求助指引", () => {
@@ -30,11 +31,15 @@ describe("assessRisk", () => {
 });
 
 describe("buildAgentSystemPrompt", () => {
-  it("明确只采用已审核原则且声明 AI 分身边界", () => {
-    const prompt = buildAgentSystemPrompt("- 观察持续行动", "来源 1｜第 10-12 行：示例证据");
-    expect(prompt).toContain("已经批准");
-    expect(prompt).toContain("未批准的候选不得被当作人格规则");
-    expect(prompt).toContain("AI 情感陪伴参考助手");
-    expect(prompt).toContain("来源 1｜第 10-12 行");
+  it("提供人格化的直接操作与口语节奏，且不向用户展示检索过程", () => {
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).toContain("RICH 关系判断顺序");
+    expect(prompt).toContain("判断—操作—验证—追问");
+    expect(prompt).toContain("你先别急");
+    expect(prompt).toContain("不要展示原文行号、检索过程、课程出处");
+    expect(prompt).toContain("安全边界");
+    expect(PERSONA_METHOD_LIBRARY).toHaveLength(10);
+    expect(prompt).toContain("承诺与行动不一致");
+    expect(prompt).toContain("筛选与止损");
   });
 });

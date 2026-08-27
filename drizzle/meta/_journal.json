@@ -29,6 +29,13 @@
       "when": 1787811937152,
       "tag": "0003_strange_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1787853944377,
+      "tag": "0004_special_electro",
+      "breakpoints": true
     }
   ]
 }
