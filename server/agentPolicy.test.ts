@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assessRisk, buildAgentSystemPrompt } from "./agentPolicy";
 import { PERSONA_METHOD_LIBRARY } from "./personaBlueprint";
+import { CORPUS_DERIVED_PROFILE } from "./corpusDerivedVoiceProfile";
 
 describe("assessRisk", () => {
   it("将自伤语言分流为高风险求助指引", () => {
@@ -38,8 +39,16 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("你先别急");
     expect(prompt).toContain("不要展示原文行号、检索过程、课程出处");
     expect(prompt).toContain("安全边界");
-    expect(PERSONA_METHOD_LIBRARY).toHaveLength(10);
+    expect(PERSONA_METHOD_LIBRARY).toHaveLength(11);
+    expect(prompt).toContain("可撤销供养与可积累能力");
+    expect(prompt).toContain("道先于术");
+    expect(prompt).toContain("650–1,200 个中文字符");
     expect(prompt).toContain("承诺与行动不一致");
     expect(prompt).toContain("筛选与止损");
+    expect(prompt).toContain("用户的短追问默认承接前文");
+    expect(prompt).toContain("礼物和关系决定要分账");
+    expect(prompt).toContain("涉及分手后的补偿礼物，默认先把礼物收着");
+    expect(CORPUS_DERIVED_PROFILE.coverage.lines).toBe(582_135);
+    expect(CORPUS_DERIVED_PROFILE.coverage.utterances).toBe(48_514);
   });
 });

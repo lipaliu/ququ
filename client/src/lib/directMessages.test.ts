@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { appendDirectMessage, resetDirectMessages, rollbackDirectUserMessage } from "./directMessages";
+import {
+  appendAssistantDelta,
+  appendDirectMessage,
+  appendPendingExchange,
+  finishPendingAssistant,
+  resetDirectMessages,
+  rollbackDirectUserMessage,
+} from "./directMessages";
 
 describe("direct message queue", () => {
   it("immediately appends the user message and directly appends the complete model response", () => {
@@ -24,5 +31,21 @@ describe("direct message queue", () => {
 
   it("clears temporary messages when a different conversation is selected", () => {
     expect(resetDirectMessages()).toEqual([]);
+  });
+
+  it("keeps the user message visible while assistant text streams into its own placeholder", () => {
+    const pending = appendPendingExchange([], "我先继续说", "request-1");
+    expect(pending).toEqual([
+      { id: "user-request-1", role: "user", content: "我先继续说" },
+      { id: "assistant-request-1", role: "assistant", content: "", status: "pending" },
+    ]);
+
+    const partial = appendAssistantDelta(pending, "request-1", "你先别急");
+    expect(partial[1]).toMatchObject({ content: "你先别急", status: "streaming" });
+    const complete = finishPendingAssistant(
+      appendAssistantDelta(partial, "request-1", "，把账算清楚。"),
+      "request-1",
+    );
+    expect(complete[1]).toMatchObject({ content: "你先别急，把账算清楚。", status: undefined });
   });
 });

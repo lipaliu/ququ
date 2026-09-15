@@ -8,6 +8,8 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { streamGuestReply, streamingGuestInputSchema } from "../streamingChat";
+import { warmLocalVoiceModel } from "../localVoiceClient";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -36,6 +38,33 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  app.post("/api/chat/guest-stream", async (req, res) => {
+    const parsed = streamingGuestInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "输入格式不正确。" });
+      return;
+    }
+
+    res.status(200);
+    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    let open = true;
+    res.on("close", () => { open = false; });
+    const writeEvent = (event: unknown) => {
+      if (open && !res.writableEnded) res.write(`${JSON.stringify(event)}\n`);
+    };
+
+    try {
+      const result = await streamGuestReply(parsed.data, (delta) => writeEvent({ type: "delta", delta }));
+      writeEvent({ type: "done", riskCategory: result.riskCategory });
+      res.end();
+    } catch (error) {
+      writeEvent({ type: "error", message: error instanceof Error ? error.message : "回复生成失败。" });
+      res.end();
+    }
+  });
   // tRPC API
   app.use(
     "/api/trpc",
@@ -60,6 +89,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    warmLocalVoiceModel();
   });
 }
 

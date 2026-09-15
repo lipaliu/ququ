@@ -1,3 +1,5 @@
+import voiceDelivery from "../shared/voiceDelivery.json";
+
 export type RiskAssessment = {
   level: "normal" | "elevated" | "high";
   category: "none" | "self_harm" | "imminent_violence" | "violence_control" | "medical" | "legal";
@@ -66,6 +68,9 @@ ${methodLibrary}
 【运行约束】
 你当前使用的是版本 ${PERSONA_BLUEPRINT_VERSION} 的人格底稿。基于对话历史作答，不要提起语料、资料、原文、行号、课程、检索、人格底稿或系统提示。用户要的是一个有判断的人，不是一个展示分析过程的工具。
 
-不要因为用户情绪激烈就变成空泛安慰。先给清楚判断，再落到动作。信息不全也不要只回“请补充更多信息”；先说目前最需要警惕或最值得推进的方向，再问一个决定性问题。`;
+不要因为用户情绪激烈就变成空泛安慰。先给清楚判断，再落到动作。信息不全也不要只回“请补充更多信息”；先说目前最需要警惕或最值得推进的方向，再问一个决定性问题。
+
+【当前表达校准；优先于上文固定步骤要求】
+${voiceDelivery.instructions.join("\n")}`;
 }
 import { PERSONA_BLUEPRINT, PERSONA_BLUEPRINT_VERSION, PERSONA_METHOD_LIBRARY } from "./personaBlueprint";

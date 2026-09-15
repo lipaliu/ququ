@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, User, Sparkles } from "lucide-react";
+import { Send, User, Sparkles } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Streamdown } from "streamdown";
 
@@ -10,8 +10,10 @@ import { Streamdown } from "streamdown";
  * Message type matching server-side LLM Message interface
  */
 export type Message = {
+  id?: string;
   role: "system" | "user" | "assistant";
   content: string;
+  status?: "pending" | "streaming" | "error";
 };
 
 export type AIChatBoxProps = {
@@ -168,7 +170,7 @@ export function AIChatBox({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedInput = input.trim();
-    if (!trimmedInput || isLoading) return;
+    if (!trimmedInput) return;
 
     onSendMessage(trimmedInput);
     setInput("");
@@ -212,8 +214,7 @@ export function AIChatBox({
                     <button
                       key={index}
                       onClick={() => onSendMessage(prompt)}
-                      disabled={isLoading}
-                      className="rounded-lg border border-border bg-card px-4 py-2 text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-lg border border-border bg-card px-4 py-2 text-sm transition-colors hover:bg-accent"
                     >
                       {prompt}
                     </button>
@@ -262,7 +263,15 @@ export function AIChatBox({
                     >
                       {message.role === "assistant" ? (
                         <div className="prose prose-sm dark:prose-invert max-w-none">
-                          <Streamdown>{message.content}</Streamdown>
+                          {message.content ? <Streamdown>{message.content}</Streamdown> : null}
+                          {message.status === "pending" && !message.content && (
+                            <span className="inline-flex items-center gap-1 py-1" aria-label="曲曲正在回复">
+                              <span className="size-1.5 animate-bounce rounded-full bg-primary/55 [animation-delay:-0.2s]" />
+                              <span className="size-1.5 animate-bounce rounded-full bg-primary/55 [animation-delay:-0.1s]" />
+                              <span className="size-1.5 animate-bounce rounded-full bg-primary/55" />
+                            </span>
+                          )}
+                          {message.status === "streaming" && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle" aria-hidden="true" />}
                         </div>
                       ) : (
                         <p className="whitespace-pre-wrap text-sm">
@@ -293,7 +302,7 @@ export function AIChatBox({
                     <Sparkles className="size-4 text-primary" />
                   </div>
                     <div className="rounded-lg bg-muted px-4 py-2.5 text-sm text-muted-foreground">
-                      我在看，马上说重点。
+                      我在结合前文判断，第一次回复可能慢一点。
                   </div>
                 </div>
               )}
@@ -320,14 +329,10 @@ export function AIChatBox({
         <Button
           type="submit"
           size="icon"
-          disabled={!input.trim() || isLoading}
+          disabled={!input.trim()}
           className="shrink-0 h-[38px] w-[38px]"
         >
-          {isLoading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Send className="size-4" />
-          )}
+          <Send className="size-4" />
         </Button>
       </form>
     </div>

@@ -5,10 +5,83 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { assessRisk, buildAgentSystemPrompt } from "./agentPolicy";
+import { ENV } from "./_core/env";
+import { buildLocalPreviewReply } from "./localPreviewReply";
+import { canUseLocalVoiceModel, generateLocalVoiceReply } from "./localVoiceClient";
+import { applyReviewedJudgmentRules, resolveReviewedJudgment } from "./reviewedJudgmentRules";
 import * as db from "./db";
+import { relevantHistory } from "./conversationContext";
 
 const scenarioSchema = z.enum(["relationship", "communication", "decision", "general"]);
 const reviewStatusSchema = z.enum(["approved", "needs_revision", "rejected"]);
+const guestHistorySchema = z.array(z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().trim().min(1).max(4000),
+})).max(10);
+
+type ChatHistoryMessage = { role: "user" | "assistant"; content: string };
+
+async function generateNormalReply(input: {
+  content: string;
+  history: ChatHistoryMessage[];
+}) {
+  input = { ...input, history: relevantHistory(input.content, input.history) };
+  const reviewed = resolveReviewedJudgment(input.content, input.history);
+  if (reviewed) return reviewed.reply;
+
+  if (!ENV.forgeApiKey && !ENV.isProduction) {
+    if (canUseLocalVoiceModel()) {
+      try {
+        const modelReply = await generateLocalVoiceReply(input.content, input.history);
+        return applyReviewedJudgmentRules(input.content, input.history, modelReply);
+      } catch (error) {
+        console.warn("Local voice model failed; using the explicit deterministic preview fallback.", error);
+      }
+    }
+    return buildLocalPreviewReply(input.content, input.history);
+  }
+
+  let response;
+  try {
+    response = await invokeLLM({
+      model: "gpt-5-mini",
+      maxTokens: 720,
+      messages: [
+        { role: "system", content: buildAgentSystemPrompt() },
+        ...input.history.map((message) => ({ role: message.role, content: message.content })),
+        { role: "user", content: input.content },
+      ],
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("OPENAI_API_KEY")) {
+      throw new Error("本地模型尚未配置，游客对话入口已经可用，但需要模型密钥才能生成回复。");
+    }
+    throw error;
+  }
+
+  const rawContent = response.choices[0]?.message?.content;
+  return (typeof rawContent === "string" ? rawContent.trim() : "")
+    || "我现在没有生成出合适的回复。你愿意换一种方式，把最让你卡住的具体场景说给我听吗？";
+}
+
+async function generateGuestReply(input: {
+  content: string;
+  history: ChatHistoryMessage[];
+}) {
+  const risk = assessRisk(input.content);
+  if (risk.level !== "normal") {
+    return {
+      message: { role: "assistant" as const, content: risk.response ?? "我很重视你的安全，请优先联系当地专业支持。" },
+      riskCategory: risk.category,
+    };
+  }
+
+  const content = await generateNormalReply(input);
+  return {
+    message: { role: "assistant" as const, content },
+    riskCategory: "none" as const,
+  };
+}
 
 function assertAdmin(role: string | undefined) {
   if (role !== "admin") throw new Error("仅项目管理员可审核语料与表达原则。");
@@ -74,6 +147,10 @@ export const appRouter = router({
     }),
   }),
   chat: router({
+    guestSend: publicProcedure.input(z.object({
+      content: z.string().trim().min(1, "请先输入想聊的内容。").max(4000, "单条消息请控制在 4000 字以内。"),
+      history: guestHistorySchema.default([]),
+    })).mutation(({ input }) => generateGuestReply(input)),
     listConversations: protectedProcedure.query(({ ctx }) => db.listConversations(ctx.user.id)),
     createConversation: protectedProcedure.input(z.object({
       title: z.string().trim().min(1).max(120),
@@ -112,18 +189,13 @@ export const appRouter = router({
       }
 
       const [history] = await Promise.all([historyPromise, saveUserMessage]);
-      const response = await invokeLLM({
-        model: "gpt-5-mini",
-        maxTokens: 720,
-        messages: [
-          { role: "system", content: buildAgentSystemPrompt() },
-          ...history.slice(-10).map((message) => ({ role: message.role, content: message.content })),
-          { role: "user", content: input.content },
-        ],
+      const content = await generateNormalReply({
+        content: input.content,
+        history: history
+          .filter((message): message is typeof message & { role: "user" | "assistant" } => message.role !== "system")
+          .slice(-10)
+          .map((message) => ({ role: message.role, content: message.content })),
       });
-      const rawContent = response.choices[0]?.message?.content;
-      const content = (typeof rawContent === "string" ? rawContent.trim() : "")
-        || "我现在没有生成出合适的回复。你愿意换一种方式，把最让你卡住的具体场景说给我听吗？";
       const assistant = await db.appendChatMessage({
         conversationId: input.conversationId,
         role: "assistant",
